@@ -1,19 +1,9 @@
 /*
-	Copyright (C) 2013 - 2014 CurlyMo
+	Copyright (C) CurlyMo
 
-	This file is part of pilight.
-
-	pilight is free software: you can redistribute it and/or modify it under the
-	terms of the GNU General Public License as published by the Free Software
-	Foundation, either version 3 of the License, or (at your option) any later
-	version.
-
-	pilight is distributed in the hope that it will be useful, but WITHOUT ANY
-	WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR
-	A PARTICULAR PURPOSE.  See the GNU General Public License for more details.
-
-	You should have received a copy of the GNU General Public License
-	along with pilight. If not, see	<http://www.gnu.org/licenses/>
+  This Source Code Form is subject to the terms of the Mozilla Public
+  License, v. 2.0. If a copy of the MPL was not distributed with this
+  file, You can obtain one at http://mozilla.org/MPL/2.0/.
 */
 
 #include <stdio.h>
@@ -88,6 +78,9 @@ static void sort_list(void) {
 int main(int argc, char **argv) {
 	// memtrack();
 
+	const uv_thread_t pth_cur_id = uv_thread_self();
+	memcpy((void *)&pth_main_id, &pth_cur_id, sizeof(uv_thread_t));
+
 	atomicinit();
 
 	log_file_disable();
@@ -131,11 +124,11 @@ int main(int argc, char **argv) {
 	options_add(&options, "U", "uuid", OPTION_HAS_VALUE, 0, JSON_NULL, NULL, "[a-zA-Z0-9]{4}-[a-zA-Z0-9]{2}-[a-zA-Z0-9]{2}-[a-zA-Z0-9]{2}-[a-zA-Z0-9]{6}");
 	options_add(&options, "Ls", "storage-root", OPTION_HAS_VALUE, 0, JSON_NULL, NULL, "[0-9]{1,4}");
 
-	log_shell_disable();
+	log_shell_enable();
 	if(argc == 1) {
 		help = 1;
 	}
-	if(options_parse(options, argc, argv) == -1) {
+	if(options_parse(options, argc, argv, 0) == -1) {
 		// printf("Usage: %s -p protocol [options]\n", progname);
 		// goto close;
 		// help = 1;
@@ -177,8 +170,9 @@ int main(int argc, char **argv) {
 
 	if(options_exists(options, "U") == 0) {
 		options_get_string(options, "U", &uuid);
-	}
+	};
 
+	plua_init();
 	/* Initialize protocols */
 	protocol_init();
 
@@ -213,7 +207,7 @@ int main(int argc, char **argv) {
 		}
 	}
 
-	if(options_parse(options, argc, argv) == -1) {
+	if(options_parse(options, argc, argv, 1) == -1) {
 		help = 1;
 	}
 
@@ -378,7 +372,11 @@ close:
 	if(recvBuff != NULL) {
 		FREE(recvBuff);
 	}
+	if(code != NULL) {
+		json_delete(code);
+	}
 
+	plua_gc();
 	protocol_gc();
 	options_delete(options);
 	options_gc();

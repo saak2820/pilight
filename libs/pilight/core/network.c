@@ -22,6 +22,7 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
+#include <assert.h>
 #include <ctype.h>
 #include <libgen.h>
 #ifdef _WIN32
@@ -63,6 +64,7 @@
 #ifdef __FreeBSD__
 	#include <net/if_dl.h>
 #endif
+#include <assert.h>
 
 #include "../config/settings.h"
 #include "mem.h"
@@ -567,9 +569,14 @@ int whitelist_check(char *ip) {
 	char wip[16] = {'\0'};
 
 	/* Check if there are any whitelisted ip address */
-	if(config_setting_get_string("whitelist", 0, &whitelist) != 0) {
+	struct lua_state_t *state = plua_get_free_state();
+	if(config_setting_get_string(state->L, "whitelist", 0, &whitelist) != 0) {
+		assert(plua_check_stack(state->L, 0) == 0);
+		plua_clear_state(state);
 		return 0;
 	}
+	assert(plua_check_stack(state->L, 0) == 0);
+	plua_clear_state(state);
 
 	if(strlen(whitelist) == 0) {
 		FREE(whitelist);

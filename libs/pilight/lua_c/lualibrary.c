@@ -1,5 +1,5 @@
 /*
-	Copyright (C) 2013 - 2016 CurlyMo
+  Copyright (C) CurlyMo
 
   This Source Code Form is subject to the terms of the Mozilla Public
   License, v. 2.0. If a copy of the MPL was not distributed with this
@@ -39,6 +39,7 @@
 #include "async.h"
 #include "network.h"
 #include "io.h"
+#include "log.h"
 #include "table.h"
 
 #include "wiringx.h"
@@ -70,6 +71,74 @@ static const struct {
 };
 
 static const struct {
+	char *name;
+	int number;
+} pilight_reasons[] = {
+	{ "REASON_SEND_CODE", REASON_SEND_CODE },
+	{ "REASON_CONTROL_DEVICE", REASON_CONTROL_DEVICE },
+	{ "REASON_CODE_SENT", REASON_CODE_SENT },
+	{ "REASON_CODE_SEND_FAIL", REASON_CODE_SEND_FAIL },
+	{ "REASON_CODE_SEND_SUCCESS", REASON_CODE_SEND_SUCCESS },
+	{ "REASON_CODE_RECEIVED", REASON_CODE_RECEIVED },
+	{ "REASON_RECEIVED_PULSETRAIN", REASON_RECEIVED_PULSETRAIN },
+	{ "REASON_RECEIVED_OOK", REASON_RECEIVED_OOK },
+	{ "REASON_RECEIVED_API", REASON_RECEIVED_API },
+	{ "REASON_BROADCAST", REASON_BROADCAST },
+	{ "REASON_BROADCAST_CORE", REASON_BROADCAST_CORE },
+	{ "REASON_FORWARD", REASON_FORWARD },
+	{ "REASON_CONFIG_UPDATE", REASON_CONFIG_UPDATE },
+	{ "REASON_CONFIG_UPDATED", REASON_CONFIG_UPDATED },
+	{ "REASON_SOCKET_RECEIVED", REASON_SOCKET_RECEIVED },
+	{ "REASON_SOCKET_DISCONNECTED", REASON_SOCKET_DISCONNECTED },
+	{ "REASON_SOCKET_CONNECTED", REASON_SOCKET_CONNECTED },
+	{ "REASON_SOCKET_SEND", REASON_SOCKET_SEND },
+	{ "REASON_SSDP_RECEIVED", REASON_SSDP_RECEIVED },
+	{ "REASON_SSDP_RECEIVED_FREE", REASON_SSDP_RECEIVED_FREE },
+	{ "REASON_SSDP_DISCONNECTED", REASON_SSDP_DISCONNECTED },
+	{ "REASON_SSDP_CONNECTED", REASON_SSDP_CONNECTED },
+	{ "REASON_WEBSERVER_CONNECTED", REASON_WEBSERVER_CONNECTED },
+	{ "REASON_DEVICE_ADDED", REASON_DEVICE_ADDED },
+	{ "REASON_DEVICE_ADAPT", REASON_DEVICE_ADAPT },
+	{ "REASON_ADHOC_MODE", REASON_ADHOC_MODE },
+	{ "REASON_ADHOC_CONNECTED", REASON_ADHOC_CONNECTED },
+	{ "REASON_ADHOC_CONFIG_RECEIVED", REASON_ADHOC_CONFIG_RECEIVED },
+	{ "REASON_ADHOC_DATA_RECEIVED", REASON_ADHOC_DATA_RECEIVED },
+	{ "REASON_ADHOC_UPDATE_RECEIVED", REASON_ADHOC_UPDATE_RECEIVED },
+	{ "REASON_ADHOC_DISCONNECTED", REASON_ADHOC_DISCONNECTED },
+	{ "REASON_SEND_BEGIN", REASON_SEND_BEGIN },
+	{ "REASON_SEND_END", REASON_SEND_END },
+	{ "REASON_ARP_FOUND_DEVICE", REASON_ARP_FOUND_DEVICE },
+	{ "REASON_ARP_LOST_DEVICE", REASON_ARP_LOST_DEVICE },
+	{ "REASON_ARP_CHANGED_DEVICE", REASON_ARP_CHANGED_DEVICE },
+	{ "REASON_LOG", REASON_LOG },
+	{ "REASON_END", REASON_END },
+};
+
+static const struct {
+	char *name;
+	int number;
+} pilight_hardware[] = {
+	{ "RF433", RF433 },
+	{ "RF868", RF868 },
+	{ "SHELLY", SHELLY },
+	{ "NONE", RFNONE }
+};
+
+static const struct {
+	char *name;
+	int number;
+} pilight_log[] = {
+	{ "LOG_EMERG", LOG_EMERG },
+	{ "LOG_ALERT", LOG_ALERT },
+	{ "LOG_CRIT", LOG_CRIT },
+	{ "LOG_ERR", LOG_ERR },
+	{ "LOG_WARNING", LOG_WARNING },
+	{ "LOG_NOTICE", LOG_NOTICE },
+	{ "LOG_INFO", LOG_INFO },
+	{ "LOG_DEBUG", LOG_DEBUG }
+};
+
+static const struct {
 	const char *name;
 	const luaL_Reg *libs;
 } pilight_two_lib[] = {
@@ -85,6 +154,7 @@ static const struct {
 static const luaL_Reg pilight_one_lib[] = {
 	{ "config", plua_config },
 	{ "table", plua_table },
+	{ "log", plua_log },
 	{NULL, NULL}
 };
 
@@ -121,7 +191,7 @@ void plua_register_library(struct lua_State *L) {
 	/*
 	 * Defaults
 	 */
-	lua_pushstring(L, "defaults");
+	lua_pushstring(L, "default");
 	lua_newtable(L);
 	int len = sizeof(pilight_defaults)/sizeof(pilight_defaults[0]);
 	for(i=0;i<len;i++) {
@@ -137,9 +207,55 @@ void plua_register_library(struct lua_State *L) {
 	}
 	lua_settable(L, -3);
 
+	/*
+	 * Reason
+	 */
+	lua_pushstring(L, "reason");
+	lua_newtable(L);
+	len = sizeof(pilight_reasons)/sizeof(pilight_reasons[0]);
+	for(i=0;i<len;i++) {
+		lua_pushstring(L, &pilight_reasons[i].name[7]);
+		lua_pushnumber(L, pilight_reasons[i].number+10000);
+		lua_settable(L, -3);
+	}
+	lua_settable(L, -3);
+
+	lua_pushstring(L, "hardware");
+	lua_newtable(L);
+	len = sizeof(pilight_hardware)/sizeof(pilight_hardware[0]);
+	for(i=0;i<len;i++) {
+		lua_pushstring(L, pilight_hardware[i].name);
+		lua_pushnumber(L, pilight_hardware[i].number);
+		lua_settable(L, -3);
+	}
+	lua_settable(L, -3);
+
 	lua_setglobal(L, "pilight");
 
+	len = sizeof(pilight_log)/sizeof(pilight_log[0]);
+	for(i=0;i<len;i++) {
+		lua_pushnumber(L, pilight_log[i].number);
+		lua_setglobal(L, pilight_log[i].name);
+	}
+
+	/*
+	 * Defaults
+	 */
 	lua_newtable(L);
+
+	len = sizeof(wiringx_globals)/sizeof(wiringx_globals[0]);
+	for(i=0;i<len;i++) {
+		lua_pushstring(L, wiringx_globals[i].name);
+		if(wiringx_globals[i].type == LUA_TNUMBER) {
+			lua_pushnumber(L, wiringx_globals[i].value.number_);
+		} else if(wiringx_globals[i].type == LUA_TSTRING) {
+			lua_pushstring(L, wiringx_globals[i].value.string_);
+		} else if(wiringx_globals[i].type == LUA_TBOOLEAN) {
+			lua_pushboolean(L, wiringx_globals[i].value.number_);
+		}
+		lua_settable(L, -3);
+	}
+
 	i = 0;
 	while(wiringx_lib[i].name != NULL) {
 		lua_pushstring(L, wiringx_lib[i].name);

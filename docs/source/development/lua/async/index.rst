@@ -6,6 +6,10 @@ The Async functions are used to asynchronously run code.
 - `Timer`_
 - `Thread`_
 
+.. versionadded:: 8.1.5
+
+- `Event`_
+
 Timer
 -----
 
@@ -126,6 +130,98 @@ Example
      data['status'] = "Hello World!";
 
      thread.trigger();
+
+     return 1;
+   end
+
+   return M;
+
+Event
+-----
+
+.. versionadded:: 8.1.5
+
+The event library implements an async consumer listener pattern
+
+API
+^^^
+
+.. c:function:: userdata pilight.async.event()
+
+   Creates a new event object
+
+.. c:function:: userdata register(int callback)
+
+   Register the async object to a specific event
+
+.. c:function:: userdata unregister(int callback)
+
+   Unregister the async object from a specific event
+
+.. c:function:: userdata getUserdata()
+
+   Returns a persistent userdata table for the lifetime of the thread object.
+
+.. c:function:: boolean setCallback(string callback)
+
+   The name of the callback being trigger when the event occured
+
+.. c:function:: boolean setUserdata(userdata table)
+
+   Set a new persistent userdata table for the lifetime of the thread object. The userdata table cannot be of another type as returned from the getUserdata functions.
+
+.. c:function:: boolean trigger(userdata table)
+
+   Trigger an event with data from lua
+
+.. c:function:: boolean gc()
+
+   Garbage collect the event object when no callback is set
+
+Example listening
+^^^^^^^^^^^^^^^^^
+
+.. code-block:: lua
+
+   local M = {};
+
+   function M.send(event, reason, data)
+     --
+     -- Check, double check
+     --
+     if reason ~= pilight.reason.SEND_CODE then
+        return;
+     end;
+
+     print(data['pulses']); -- The SEND_CODE metatable contains specific keys like 'pulses'
+   end
+
+   function M.run()
+     local event = pilight.async.event();
+     event.register(pilight.reason.SEND_CODE);
+     event.setCallback("event");
+
+     return 1;
+   end
+
+   return M;
+
+Example triggering
+^^^^^^^^^^^^^^^^^^
+
+.. code-block:: lua
+
+   local M = {};
+
+   function M.run()
+     local event = pilight.async.event();
+     event.register(pilight.reason.RECEIVED_PULSETRAIN);
+
+     local data = {};
+     data['length'] = 0;
+
+     event.trigger(data)
+     event.gc();
 
      return 1;
    end

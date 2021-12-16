@@ -1,8 +1,10 @@
--- Copyright (C) 2013 - 2016 CurlyMo
-
+--
+-- Copyright (C) CurlyMo
+--
 -- This Source Code Form is subject to the terms of the Mozilla Public
 -- License, v. 2.0. If a copy of the MPL was not distributed with this
 -- file, You can obtain one at http://mozilla.org/MPL/2.0/.
+--
 
 local json = require "json";
 
@@ -27,8 +29,8 @@ function M.read(f)
 	local config = pilight.config();
 	local data = config.getData();
 	local port = -1;
-	local http_port = pilight.defaults.WEBSERVER_HTTP_PORT;
-	local https_port = pilight.defaults.WEBSERVER_HTTPS_PORT;
+	local http_port = pilight.default.WEBSERVER_HTTP_PORT;
+	local https_port = pilight.default.WEBSERVER_HTTPS_PORT;
 	local jobject = json.parse(content);
 	local settings = jobject['settings'];
 
@@ -174,7 +176,7 @@ function M.read(f)
 
 	v = 'webserver-authentication';
 	if settings[v] ~= nil then
-		if type(settings[v]) ~= 'table' or settings[v].__len() ~= 2 then
+		if type(settings[v]) ~= 'table' or settings[v].len() ~= 2 then
 			error('config setting "' .. v .. '" must be in the format of [ "username", "password" ]');
 		end
 		if type(settings[v][1]) ~= 'string' or type(settings[v][2]) ~= 'string' then
@@ -189,7 +191,7 @@ function M.read(f)
 	--
 	v = 'ntp-servers';
 	if settings[v] ~= nil then
-		if type(settings[v]) ~= 'table' or settings[v].__len() == 0 then
+		if type(settings[v]) ~= 'table' or settings[v].len() == 0 then
 			error('config setting "' .. v .. '" must be in the format of [ \"0.eu.pool.ntp.org\", ... ]');
 		end
 		if type(settings[v]) == 'table' then
@@ -317,13 +319,17 @@ function M.read(f)
 		error('config setting "' .. v .. '" must be set in combination with the smtp-host, smtp-port, smtp-user, smtp-password and smtp-sender settings');
 	end
 
+	local wx = nil;
 	v = 'gpio-platform';
 	if settings[v] ~= nil then
 		s = settings[v];
 		if type(v) ~= 'string' then
 		end
-		if s ~= "none" and wiringX.setup(s) ~= true then
-			error('config setting "' .. v .. '" must contain a supported gpio platform');
+		if s ~= "none" then
+			wx = wiringX.setup(s);
+			if type(wx) ~= 'table' then
+				error('config setting "' .. v .. '" must contain a supported gpio platform');
+			end
 		end
 	end
 
@@ -340,7 +346,7 @@ function M.read(f)
 			if type(s) ~= 'number' or s < 0 then
 				error('config setting "' .. v .. '" must contain a number larger than 0');
 			end
-			if wiringX.hasGPIO(s) == false then
+			if wx.hasGPIO(s) == false then
 				error('config setting "' .. v .. '" must contain a valid GPIO number');
 			end
 		end
@@ -357,7 +363,7 @@ function M.read(f)
 					end
 				end
 			end
-			if v1 ~= v and s == pilight.defaults[v1:upper():gsub('-', '_')] then
+			if v1 ~= v and s == pilight.default[v1:upper():gsub('-', '_')] then
 				error('config setting "' .. v .. '" value is already the default gpio of "' .. v1 ..'"');
 			end
 		end

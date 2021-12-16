@@ -419,7 +419,7 @@ size_t websocket_write(uv_poll_t *req, int opcode, const char *data, unsigned lo
 	return data_len;
 }
 
-static void *webserver_send(int reason, void *param) {
+static void *webserver_send(int reason, void *param, void *userdata) {
 	struct reason_socket_send_t *data = param;
 	struct connection_t c;
 	memset(&c, 0, sizeof(struct connection_t));
@@ -702,7 +702,10 @@ static int parse_rest(uv_poll_t *req) {
 					if(value != NULL) {
 						FREE(value);
 					}
-					if(config_registry_get(key, &out) == 0) {
+					struct lua_state_t *state = plua_get_free_state();
+					if(config_registry_get(state->L, key, &out) == 0) {
+						assert(plua_check_stack(state->L, 0) == 0);
+						plua_clear_state(state);
 						if(out.type_ == LUA_TNUMBER) {
 							struct JsonNode *jsend = json_mkobject();
 							json_append_member(jsend, "message", json_mkstring("registry"));
@@ -736,6 +739,8 @@ static int parse_rest(uv_poll_t *req) {
 							goto clear;
 						}
 					} else {
+						assert(plua_check_stack(state->L, 0) == 0);
+						plua_clear_state(state);
 						FREE(key);
 					}
 				} else if(getsetrm == 's') {
@@ -747,22 +752,36 @@ static int parse_rest(uv_poll_t *req) {
 						goto clear;
 					} else {
 						if(isNumeric(value) == 0) {
-							if(config_registry_set_number(key, atof(value)) == 0) {
+							struct lua_state_t *state = plua_get_free_state();
+							if(config_registry_set_number(state->L, key, atof(value)) == 0) {
+								assert(plua_check_stack(state->L, 0) == 0);
+								plua_clear_state(state);
+
 								char *z = "{\"message\":\"success\"}";
 								send_data(req, "application/json", z, strlen(z));
 								FREE(decoded);
 								FREE(key);
 								FREE(value);
 								goto clear;
+							} else {
+								assert(plua_check_stack(state->L, 0) == 0);
+								plua_clear_state(state);
 							}
 						} else {
-							if(config_registry_set_string(key, value) == 0) {
+							struct lua_state_t *state = plua_get_free_state();
+							if(config_registry_set_string(state->L, key, value) == 0) {
+								assert(plua_check_stack(state->L, 0) == 0);
+								plua_clear_state(state);
+
 								char *z = "{\"message\":\"success\"}";
 								send_data(req, "application/json", z, strlen(z));
 								FREE(decoded);
 								FREE(key);
 								FREE(value);
 								goto clear;
+							} else {
+								assert(plua_check_stack(state->L, 0) == 0);
+								plua_clear_state(state);
 							}
 						}
 					}
@@ -776,8 +795,11 @@ static int parse_rest(uv_poll_t *req) {
 					if(value != NULL) {
 						FREE(value);
 					}
-					if(config_registry_get(key, &out) == 0 &&
-						config_registry_set_null(key) == 0) {
+					struct lua_state_t *state = plua_get_free_state();
+					if(config_registry_get(state->L, key, &out) == 0 &&
+						config_registry_set_null(state->L, key) == 0) {
+						assert(plua_check_stack(state->L, 0) == 0);
+						plua_clear_state(state);
 						char *z = "{\"message\":\"success\"}";
 						send_data(req, "application/json", z, strlen(z));
 						if(out.type_ == JSON_STRING) {
@@ -786,6 +808,9 @@ static int parse_rest(uv_poll_t *req) {
 						FREE(decoded);
 						FREE(key);
 						goto clear;
+					} else {
+						assert(plua_check_stack(state->L, 0) == 0);
+						plua_clear_state(state);
 					}
 					char *z = "{\"message\":\"failed\"}";
 					send_data(req, "application/json", z, strlen(z));
@@ -916,6 +941,7 @@ static int request_handler(uv_poll_t *req) {
 						internal = CONFIG_INTERNAL;
 					}
 				}
+
 				struct JsonNode *jsend = config_print(internal, media);
 				if(jsend != NULL) {
 					char *output = json_stringify(jsend, NULL);
@@ -1178,7 +1204,7 @@ static void webserver_process(uv_async_t *handle) {
 #endif
 }
 
-static void *broadcast(int reason, void *param) {
+static void *broadcast(int reason, void *param, void *userdata) {
 	if(loop == 0) {
 		return NULL;
 	}
@@ -1997,6 +2023,8 @@ int webserver_start(void) {
 		/*LCOV_EXCL_STOP*/
 	}
 
+	struct lua_state_t *state = plua_get_free_state();
+
 	if((async_req = MALLOC(sizeof(uv_async_t))) == NULL) {
 		OUT_OF_MEMORY /*LCOV_EXCL_LINE*/
 	}
@@ -2038,14 +2066,15 @@ int webserver_start(void) {
 	settings_select_string_element(ORIGIN_WEBSERVER, "webserver-authentication", 0, &authentication_username);
 	settings_select_string_element(ORIGIN_WEBSERVER, "webserver-authentication", 1, &authentication_password);
 #else
+
 	/* Check on what port the webserver needs to run */
-	config_setting_get_number("webserver-http-port", 0, &http_port);
+	config_setting_get_number(state->L, "webserver-http-port", 0, &http_port);
 
 #ifdef WEBSERVER_HTTPS
-	config_setting_get_number("webserver-https-port", 0, &https_port);
+	config_setting_get_number(state->L, "webserver-https-port", 0, &https_port);
 #endif
 
-	if(config_setting_get_string("webserver-root", 0, &root) != 0) {
+	if(config_setting_get_string(state->L, "webserver-root", 0, &root) != 0) {
 		/* If no webserver port was set, use the default webserver port */
 		if((root = MALLOC(strlen(WEBSERVER_ROOT)+1)) == NULL) {
 			fprintf(stderr, "out of memory\n");
@@ -2053,21 +2082,20 @@ int webserver_start(void) {
 		}
 		strcpy(root, WEBSERVER_ROOT);
 	}
-	config_setting_get_number("webgui-websockets", 0, &websockets);
+	config_setting_get_number(state->L, "webgui-websockets", 0, &websockets);
 
 	/* Do we turn on webserver caching. This means that all requested files are
 	   loaded into the memory so they aren't read from the FS anymore */
-	config_setting_get_number("webserver-cache", 0, &cache);
-	config_setting_get_string("webserver-authentication", 0, &authentication_username);
-	config_setting_get_string("webserver-authentication", 1, &authentication_password);
-
+	config_setting_get_number(state->L, "webserver-cache", 0, &cache);
+	config_setting_get_string(state->L, "webserver-authentication", 0, &authentication_username);
+	config_setting_get_string(state->L, "webserver-authentication", 1, &authentication_password);
 #endif
 
-	eventpool_callback(REASON_CONFIG_UPDATE, broadcast);
-	eventpool_callback(REASON_BROADCAST_CORE, broadcast);
+	eventpool_callback(REASON_CONFIG_UPDATE, broadcast, NULL);
+	eventpool_callback(REASON_BROADCAST_CORE, broadcast, NULL);
 	// eventpool_callback(REASON_ADHOC_CONNECTED, adhoc_mode);
 	// eventpool_callback(REASON_ADHOC_DISCONNECTED, webserver_restart);
-	eventpool_callback(REASON_SOCKET_SEND, webserver_send);
+	eventpool_callback(REASON_SOCKET_SEND, webserver_send, NULL);
 
 #ifdef WEBSERVER_HTTPS
 	if(https_port > 0 /*&& webserver_enabled == 1*/) {
@@ -2082,6 +2110,9 @@ int webserver_start(void) {
 	if(http_port > 0 /*&& webserver_enabled == 1*/) {
 		webserver_init(http_port, 0);
 	}
+
+	assert(plua_check_stack(state->L, 0) == 0);
+	plua_clear_state(state);
 
 	return 0;
 }

@@ -25,11 +25,12 @@
 	#include <unistd.h>
 #endif
 
+#include "../core/log.h"
 #include "cast.h"
 
 int plua_cast_toboolean(struct lua_State *L) {
 	if(lua_gettop(L) != 1) {
-		luaL_error(L, "toboolean requires 1 arguments, %d given", lua_gettop(L));
+		pluaL_error(L, "toboolean requires 1 arguments, %d given", lua_gettop(L));
 	}
 
 	char buf[128] = { '\0' }, *p = buf;
@@ -63,14 +64,14 @@ int plua_cast_toboolean(struct lua_State *L) {
 		} break;
 	}
 
-	assert(lua_gettop(L) == 1);
+	assert(plua_check_stack(L, 1, PLUA_TBOOLEAN) == 0);
 
 	return 1;
 }
 
 int plua_cast_tonumber(struct lua_State *L) {
 	if(lua_gettop(L) != 1) {
-		luaL_error(L, "tonumber requires 1 arguments, %d given", lua_gettop(L));
+		pluaL_error(L, "tonumber requires 1 arguments, %d given", lua_gettop(L));
 	}
 
 	char buf[128] = { '\0' }, *p = buf;
@@ -104,14 +105,14 @@ int plua_cast_tonumber(struct lua_State *L) {
 		} break;
 	}
 
-	assert(lua_gettop(L) == 1);
+	assert(plua_check_stack(L, 1, PLUA_TNUMBER) == 0);
 
 	return 1;
 }
 
 int plua_cast_tostring(struct lua_State *L) {
 	if(lua_gettop(L) != 1) {
-		luaL_error(L, "tostring requires 1 arguments, %d given", lua_gettop(L));
+		pluaL_error(L, "tostring requires 1 arguments, %d given", lua_gettop(L));
 	}
 
 	char buf[128] = { '\0' }, *p = buf;
@@ -153,7 +154,7 @@ int plua_cast_tostring(struct lua_State *L) {
 		} break;
 	}
 
-	assert(lua_gettop(L) == 1);
+	assert(plua_check_stack(L, 1, PLUA_TSTRING) == 0);
 
 	return 1;
 }

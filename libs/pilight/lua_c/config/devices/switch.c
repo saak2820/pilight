@@ -46,11 +46,11 @@ static int plua_config_device_switch_send(lua_State *L) {
 	struct plua_device_t *dev = (void *)lua_topointer(L, lua_upvalueindex(1));
 
 	if(dev == NULL) {
-		luaL_error(L, "internal error: device object not passed");
+		pluaL_error(L, "internal error: device object not passed");
 	}
 
 	if(lua_gettop(L) != 0) {
-		luaL_error(L, "config send requires 0 arguments, %d given", lua_gettop(L));
+		pluaL_error(L, "config send requires 0 arguments, %d given", lua_gettop(L));
 	}
 
 	struct reason_control_device_t *data1 = MALLOC(sizeof(struct reason_control_device_t));
@@ -80,9 +80,9 @@ static int plua_config_device_switch_send(lua_State *L) {
 
 	lua_pushboolean(L, 0);
 
-	assert(lua_gettop(L) == 1);
+	assert(plua_check_stack(L, 1, PLUA_TBOOLEAN) == 0);
 
-	return 0;
+	return 1;
 }
 
 static int plua_config_device_switch_get_state(lua_State *L) {
@@ -90,26 +90,26 @@ static int plua_config_device_switch_get_state(lua_State *L) {
 	char *state = NULL;
 
 	if(dev == NULL) {
-		luaL_error(L, "internal error: device object not passed");
+		pluaL_error(L, "internal error: device object not passed");
 	}
 
 	if(lua_gettop(L) != 0) {
-		luaL_error(L, "config getState requires 0 arguments, %d given", lua_gettop(L));
+		pluaL_error(L, "config getState requires 0 arguments, %d given", lua_gettop(L));
 	}
 
 	if(devices_select_string_setting(ORIGIN_ACTION, dev->name, "state", &state) == 0) {
 		lua_pushstring(L, state);
 
-		assert(lua_gettop(L) == 1);
+		assert(plua_check_stack(L, 1, PLUA_TSTRING) == 0);
 
 		return 1;
 	}
 
 	lua_pushnil(L);
 
-	assert(lua_gettop(L) == 1);
+	assert(plua_check_stack(L, 1, PLUA_TNIL) == 0);
 
-	return 0;
+	return 1;
 }
 
 static int plua_config_device_switch_has_state(lua_State *L) {
@@ -119,12 +119,11 @@ static int plua_config_device_switch_has_state(lua_State *L) {
 	int i = 0;
 
 	if(dev == NULL) {
-		luaL_error(L, "internal error: device object not passed");
+		pluaL_error(L, "internal error: device object not passed");
 	}
 
 	if(lua_gettop(L) != 1) {
-		luaL_error(L, "config hasState requires 1 argument, %d given", lua_gettop(L));
-		return 0;
+		pluaL_error(L, "config hasState requires 1 argument, %d given", lua_gettop(L));
 	}
 
 	char buf[128] = { '\0' }, *p = buf;
@@ -146,7 +145,7 @@ static int plua_config_device_switch_has_state(lua_State *L) {
 				if(strcmp(opt->name, state) == 0) {
 					lua_pushboolean(L, 1);
 
-					assert(lua_gettop(L) == 1);
+					assert(plua_check_stack(L, 1, PLUA_TBOOLEAN) == 0);
 
 					return 1;
 				}
@@ -157,7 +156,7 @@ static int plua_config_device_switch_has_state(lua_State *L) {
 
 	lua_pushboolean(L, 0);
 
-	assert(lua_gettop(L) == 1);
+	assert(plua_check_stack(L, 1, PLUA_TBOOLEAN) == 0);
 
 	return 1;
 }
@@ -169,11 +168,11 @@ static int plua_config_device_switch_set_state(lua_State *L) {
 	int i = 0, match = 0;
 
 	if(dev == NULL) {
-		luaL_error(L, "internal error: device object not passed");
+		pluaL_error(L, "internal error: device object not passed");
 	}
 
 	if(lua_gettop(L) > 1) {
-		luaL_error(L, "config setState requires 1 argument, %d given", lua_gettop(L));
+		pluaL_error(L, "config setState requires 1 argument, %d given", lua_gettop(L));
 	}
 
 	char buf[128] = { '\0' }, *p = buf;
@@ -203,7 +202,7 @@ static int plua_config_device_switch_set_state(lua_State *L) {
 	if(match == 0) {
 		lua_pushboolean(L, 0);
 
-		assert(lua_gettop(L) == 1);
+		assert(plua_check_stack(L, 1, PLUA_TBOOLEAN) == 0);
 
 		return 1;
 	}
@@ -227,7 +226,7 @@ static int plua_config_device_switch_set_state(lua_State *L) {
 
 	lua_pushboolean(L, 1);
 
-	assert(lua_gettop(L) == 1);
+	assert(plua_check_stack(L, 1, PLUA_TBOOLEAN) == 0);
 
 	return 1;
 }
@@ -252,6 +251,8 @@ int plua_config_device_switch(lua_State *L, struct plua_device_t *dev) {
 	lua_pushlightuserdata(L, dev);
 	lua_pushcclosure(L, plua_config_device_switch_send, 1);
 	lua_settable(L, -3);
+
+	assert(plua_check_stack(L, 1, PLUA_TTABLE) == 0);
 
 	return 1;
 }

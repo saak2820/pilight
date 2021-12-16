@@ -13,12 +13,14 @@
 
 #include "io/file.h"
 #include "io/dir.h"
-
-extern int plua_io_file(struct lua_State *L);
+#include "io/spi.h"
+#include "io/serial.h"
 
 static const luaL_Reg pilight_io_lib[] = {
 	{"file", plua_io_file},
 	{"dir", plua_io_dir},
+	{"spi", plua_io_spi},
+	{"serial", plua_io_serial},
 	{NULL, NULL}
 };
 

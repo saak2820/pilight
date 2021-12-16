@@ -1,19 +1,9 @@
 /*
-	Copyright (C) 2013 - 2014 CurlyMo
+  Copyright (C) CurlyMo
 
-	This file is part of pilight.
-
-	pilight is free software: you can redistribute it and/or modify it under the
-	terms of the GNU General Public License as published by the Free Software
-	Foundation, either version 3 of the License, or (at your option) any later
-	version.
-
-	pilight is distributed in the hope that it will be useful, but WITHOUT ANY
-	WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR
-	A PARTICULAR PURPOSE.  See the GNU General Public License for more details.
-
-	You should have received a copy of the GNU General Public License
-	along with pilight. If not, see	<http://www.gnu.org/licenses/>
+  This Source Code Form is subject to the terms of the Mozilla Public
+  License, v. 2.0. If a copy of the MPL was not distributed with this
+  file, You can obtain one at http://mozilla.org/MPL/2.0/.
 */
 
 #include <stdio.h>
@@ -29,6 +19,7 @@
 #ifndef _WIN32
 #include <wiringx.h>
 #endif
+#include <assert.h>
 
 #include "libs/pilight/core/threads.h"
 #include "libs/pilight/core/pilight.h"
@@ -75,7 +66,7 @@ int main(int argc, char **argv) {
 		goto close;
 	}
 
-	if(options_parse(options, argc, argv) == -1) {
+	if(options_parse(options, argc, argv, 1) == -1) {
 		help = 1;
 	}
 
@@ -152,9 +143,15 @@ int main(int argc, char **argv) {
 
 	protocol_init();
 	config_init();
-	if(config_read(CONFIG_ALL) != EXIT_SUCCESS) {
+
+	struct lua_state_t *state = plua_get_free_state();
+	if(config_read(state->L, CONFIG_ALL) != EXIT_SUCCESS) {
+		assert(plua_check_stack(state->L, 0) == 0);
+		plua_clear_state(state);
 		goto close;
 	}
+	assert(plua_check_stack(state->L, 0) == 0);
+	plua_clear_state(state);
 
 #ifdef _WIN32
 	if(fwfile == NULL || strlen(fwfile) == 0 || strlen(comport) == 0) {

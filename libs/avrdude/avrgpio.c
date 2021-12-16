@@ -26,6 +26,7 @@
 #include <unistd.h>
 #include <errno.h>
 #include <wiringx.h>
+#include <assert.h>
 
 #include "avrdude.h"
 #include "avr.h"
@@ -149,10 +150,15 @@ void gpio_initpgm(PROGRAMMER *pgm)
   strcpy(pgm->type, "GPIO");
 	char *platform = GPIO_PLATFORM;
 
-	if(config_setting_get_string("gpio-platform", 0, &platform) != 0) {
+	struct lua_state_t *state = plua_get_free_state();
+	if(config_setting_get_string(state->L, "gpio-platform", 0, &platform) != 0) {
+		assert(lua_gettop(state->L) == 0);
+		plua_clear_state(state);
 		logprintf(LOG_ERR, "no gpio-platform configured");
 		exit(EXIT_FAILURE);
 	}
+	assert(lua_gettop(state->L) == 0);
+	plua_clear_state(state);
 	if(strcmp(platform, "none") == 0) {
 		FREE(platform);
 		logprintf(LOG_ERR, "no gpio-platform configured");

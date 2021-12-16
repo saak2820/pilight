@@ -1,19 +1,9 @@
 /*
-	Copyright (C) 2013 - 2014 CurlyMo
+  Copyright (C) CurlyMo
 
-	This file is part of pilight.
-
-	pilight is free software: you can redistribute it and/or modify it under the
-	terms of the GNU General Public License as published by the Free Software
-	Foundation, either version 3 of the License, or (at your option) any later
-	version.
-
-	pilight is distributed in the hope that it will be useful, but WITHOUT ANY
-	WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR
-	A PARTICULAR PURPOSE.  See the GNU General Public License for more details.
-
-	You should have received a copy of the GNU General Public License
-	along with pilight. If not, see	<http://www.gnu.org/licenses/>
+  This Source Code Form is subject to the terms of the Mozilla Public
+  License, v. 2.0. If a copy of the MPL was not distributed with this
+  file, You can obtain one at http://mozilla.org/MPL/2.0/.
 */
 
 #include <stdio.h>
@@ -94,7 +84,7 @@ int main(int argc, char **argv) {
 	options_add(&options, "s", "stats", OPTION_NO_VALUE, 0, JSON_NULL, NULL, "[0-9]{1,4}");
 	options_add(&options, "F", "filter", OPTION_HAS_VALUE, 0, JSON_STRING, NULL, NULL);
 
-	if(options_parse(options, argc, argv) == -1) {
+	if(options_parse(options, argc, argv, 1) == -1) {
 		printf("Usage: %s \n", progname);
 		goto close;
 	}
@@ -136,6 +126,7 @@ int main(int argc, char **argv) {
 		m = explode(filter, ",", &filters);
 		int match = 0, j = 0;
 
+		plua_init();
 		protocol_init();
 
 		for(j=0;j<m;j++) {
@@ -175,9 +166,12 @@ int main(int argc, char **argv) {
 	if(ssdp_list != NULL) {
 		ssdp_free(ssdp_list);
 	}
-	if(server != NULL) {
-		FREE(server);
-	}
+	/*
+	 * Already freed with the options struct
+	 */
+	// if(server != NULL) {
+		// FREE(server);
+	// }
 
 	struct JsonNode *jclient = json_mkobject();
 	struct JsonNode *joptions = json_mkobject();
@@ -244,6 +238,8 @@ close:
 	}
 	options_delete(options);
 	array_free(&filters, m);
+
+	plua_gc();
 	protocol_gc();
 	options_gc();
 	log_shell_disable();

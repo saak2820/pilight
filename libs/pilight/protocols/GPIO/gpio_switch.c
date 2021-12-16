@@ -25,6 +25,7 @@
 #ifndef _WIN32
 #include <wiringx.h>
 #endif
+#include <assert.h>
 
 #include "../../core/pilight.h"
 #include "../../core/common.h"
@@ -97,12 +98,17 @@ static void *thread(void *param) {
 }
 
 static struct threadqueue_t *initDev(JsonNode *jdevice) {
+	struct lua_state_t *state = plua_get_free_state();
 	char *platform = GPIO_PLATFORM;
 
-	if(config_setting_get_string("gpio-platform", 0, &platform) != 0) {
+	if(config_setting_get_string(state->L, "gpio-platform", 0, &platform) != 0) {
 		logprintf(LOG_ERR, "no gpio-platform configured");
+		assert(lua_gettop(state->L) == 0);
+		plua_clear_state(state);
 		return NULL;
 	}
+	assert(lua_gettop(state->L) == 0);
+	plua_clear_state(state);
 	if(strcmp(platform, "none") == 0) {
 		FREE(platform);
 		logprintf(LOG_ERR, "no gpio-platform configured");
@@ -127,10 +133,15 @@ static int checkValues(struct JsonNode *jvalues) {
 	double readonly = 0.0;
 	char *platform = GPIO_PLATFORM;
 
-	if(config_setting_get_string("gpio-platform", 0, &platform) != 0) {
+	struct lua_state_t *state = plua_get_free_state();
+	if(config_setting_get_string(state->L, "gpio-platform", 0, &platform) != 0) {
 		logprintf(LOG_ERR, "no gpio-platform configured");
+		assert(plua_check_stack(state->L, 0) == 0);
+		plua_clear_state(state);
 		return -1;
 	}
+	assert(lua_gettop(state->L) == 0);
+	plua_clear_state(state);
 	if(strcmp(platform, "none") == 0) {
 		FREE(platform);
 		logprintf(LOG_ERR, "no gpio-platform configured");

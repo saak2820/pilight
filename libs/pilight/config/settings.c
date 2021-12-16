@@ -32,31 +32,38 @@
 #include "config.h"
 #include "settings.h"
 
-int config_callback_get_number(char *module, char *key, int idx, int *ret) {
-	struct lua_state_t *state = plua_get_module("storage", module);
+int config_callback_get_number(lua_State *L, char *module, char *key, int idx, int *ret) {
+	struct lua_state_t *state = plua_get_current_state(L);
+	struct plua_module_t *oldmod = state->module;
 	int x = 0;
+
+	state = plua_get_module(L, "storage", module);
 
 	if(state == NULL) {
 		return -1;
 	}
 
 	if(plua_get_method(state->L, state->module->file, "get") == -1) {
+		state->module = oldmod;
 		return -1;
 	}
 
 	if(key == NULL) {
 		logprintf(LOG_ERR, "%s key cannot be NULL", __FUNCTION__);
+		state->module = oldmod;
 		return -1;
 	}
 
 	if(ret == NULL) {
 		logprintf(LOG_ERR, "%s return value cannot be NULL", __FUNCTION__);
+		state->module = oldmod;
 		return -1;
 	}
 
 	lua_pushstring(state->L, key);
 	lua_pushnumber(state->L, idx);
 
+	assert(plua_check_stack(state->L, 4, PLUA_TTABLE, PLUA_TFUNCTION, PLUA_TSTRING, PLUA_TNUMBER) == 0);
 	if((x = plua_pcall(state->L, state->module->file, 2, 1)) == 0) {
 		if(lua_type(state->L, -1) == LUA_TNUMBER) {
 			*ret = (int)lua_tonumber(state->L, -1);
@@ -72,15 +79,18 @@ int config_callback_get_number(char *module, char *key, int idx, int *ret) {
 
 	lua_pop(state->L, -1);
 
-	assert(lua_gettop(state->L) == 0);
-	plua_clear_state(state);
+	assert(plua_check_stack(state->L, 0) == 0);
+	state->module = oldmod;
 
 	return x;
 }
 
-int config_callback_get_string(char *module, char *key, int idx, char **ret) {
-	struct lua_state_t *state = plua_get_module("storage", module);
+int config_callback_get_string(lua_State *L, char *module, char *key, int idx, char **ret) {
+	struct lua_state_t *state = plua_get_current_state(L);
+	struct plua_module_t *oldmod = state->module;
 	int x = 0;
+
+	state = plua_get_module(L, "storage", module);
 
 	if(state == NULL) {
 		return -1;
@@ -92,17 +102,20 @@ int config_callback_get_string(char *module, char *key, int idx, char **ret) {
 
 	if(key == NULL) {
 		logprintf(LOG_ERR, "%s key cannot be NULL", __FUNCTION__);
+		state->module = oldmod;
 		return -1;
 	}
 
 	if(ret == NULL) {
 		logprintf(LOG_ERR, "%s return value cannot be NULL", __FUNCTION__);
+		state->module = oldmod;
 		return -1;
 	}
 
 	lua_pushstring(state->L, key);
 	lua_pushnumber(state->L, idx);
 
+	assert(plua_check_stack(state->L, 4, PLUA_TTABLE, PLUA_TFUNCTION, PLUA_TSTRING, PLUA_TNUMBER) == 0);
 	if((x = plua_pcall(state->L, state->module->file, 2, 1)) == 0) {
 		if(lua_type(state->L, -1) == LUA_TSTRING) {
 			if((*ret = STRDUP((char *)lua_tostring(state->L, -1))) == NULL) {
@@ -118,15 +131,18 @@ int config_callback_get_string(char *module, char *key, int idx, char **ret) {
 		lua_pop(state->L, -1);
 	}
 
-	assert(lua_gettop(state->L) == 0);
-	plua_clear_state(state);
+	assert(plua_check_stack(state->L, 0) == 0);
+	state->module = oldmod;
 
 	return x;
 }
 
-int config_callback_set_string(char *module, char *key, int idx, char *val) {
-	struct lua_state_t *state = plua_get_module("storage", module);
+int config_callback_set_string(lua_State *L, char *module, char *key, int idx, char *val) {
+	struct lua_state_t *state = plua_get_current_state(L);
+	struct plua_module_t *oldmod = state->module;
 	int x = 0;
+
+	state = plua_get_module(L, "storage", module);
 
 	if(state == NULL) {
 		return -1;
@@ -138,6 +154,7 @@ int config_callback_set_string(char *module, char *key, int idx, char *val) {
 	lua_pushnumber(state->L, idx);
 	lua_pushstring(state->L, val);
 
+	assert(plua_check_stack(state->L, 5, PLUA_TTABLE, PLUA_TFUNCTION, PLUA_TSTRING, PLUA_TNUMBER, PLUA_TSTRING) == 0);
 	if((x = plua_pcall(state->L, state->module->file, 3, 1)) == 0) {
 		if(lua_type(state->L, -1) == LUA_TNUMBER) {
 			x = lua_tonumber(state->L, -1);
@@ -148,15 +165,18 @@ int config_callback_set_string(char *module, char *key, int idx, char *val) {
 		lua_pop(state->L, -1);
 	}
 
-	assert(lua_gettop(state->L) == 0);
-	plua_clear_state(state);
+	assert(plua_check_stack(state->L, 0) == 0);
+	state->module = oldmod;
 
 	return x;
 }
 
-int config_callback_set_number(char *module, char *key, int idx, int val) {
-	struct lua_state_t *state = plua_get_module("storage", module);
+int config_callback_set_number(lua_State *L, char *module, char *key, int idx, int val) {
+	struct lua_state_t *state = plua_get_current_state(L);
+	struct plua_module_t *oldmod = state->module;
 	int x = 0;
+
+	state = plua_get_module(L, "storage", module);
 
 	if(state == NULL) {
 		return -1;
@@ -168,6 +188,7 @@ int config_callback_set_number(char *module, char *key, int idx, int val) {
 	lua_pushnumber(state->L, idx);
 	lua_pushnumber(state->L, val);
 
+	assert(plua_check_stack(state->L, 5, PLUA_TTABLE, PLUA_TFUNCTION, PLUA_TSTRING, PLUA_TNUMBER, PLUA_TNUMBER) == 0);
 	if((x = plua_pcall(state->L, state->module->file, 3, 1)) == 0) {
 		if(lua_type(state->L, -1) == LUA_TNUMBER) {
 			x = lua_tonumber(state->L, -1);
@@ -178,24 +199,25 @@ int config_callback_set_number(char *module, char *key, int idx, int val) {
 		lua_pop(state->L, -1);
 	}
 
-	assert(lua_gettop(state->L) == 0);
-	plua_clear_state(state);
+	assert(plua_check_stack(state->L, 0) == 0);
+
+	state->module = oldmod;
 
 	return x;
 }
 
-int config_setting_get_number(char *key, int idx, int *ret) {
-	return config_callback_get_number("settings", key, idx, ret);
+int config_setting_get_number(lua_State *L, char *key, int idx, int *ret) {
+	return config_callback_get_number(L, "settings", key, idx, ret);
 }
 
-int config_setting_get_string(char *key, int idx, char **ret) {
-	return config_callback_get_string("settings", key, idx, ret);
+int config_setting_get_string(lua_State *L, char *key, int idx, char **ret) {
+	return config_callback_get_string(L, "settings", key, idx, ret);
 }
 
-int config_setting_set_number(char *key, int idx, int val) {
-	return config_callback_set_number("settings", key, idx, val);
+int config_setting_set_number(lua_State *L, char *key, int idx, int val) {
+	return config_callback_set_number(L, "settings", key, idx, val);
 }
 
-int config_setting_set_string(char *key, int idx, char *val) {
-	return config_callback_set_string("settings", key, idx, val);
+int config_setting_set_string(lua_State *L, char *key, int idx, char *val) {
+	return config_callback_set_string(L, "settings", key, idx, val);
 }

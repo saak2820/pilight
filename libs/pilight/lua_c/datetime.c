@@ -25,13 +25,14 @@
 	#include <unistd.h>
 #endif
 
+#include "../core/log.h"
 #include "../core/strptime.h"
 #include "../core/datetime.h"
 #include "datetime.h"
 
 int plua_datetime_strptime(struct lua_State *L) {
 	if(lua_gettop(L) != 2) {
-		luaL_error(L, "strptime requires 2 arguments, %d given", lua_gettop(L));
+		pluaL_error(L, "strptime requires 2 arguments, %d given", lua_gettop(L));
 	}
 
 	char buf[128] = { '\0' }, *p = buf;
@@ -63,7 +64,7 @@ int plua_datetime_strptime(struct lua_State *L) {
 	memset(&tm, 0, sizeof(struct tm));
 
 	if(strptime(datetime, format, &tm) == NULL) {
-		luaL_error(L, "strptime is unable to parse \"%s\" as \"%s\" ", datetime, format);
+		pluaL_error(L, "strptime is unable to parse \"%s\" as \"%s\" ", datetime, format);
 	}
 
 	int year = tm.tm_year+1900;
@@ -106,7 +107,7 @@ int plua_datetime_strptime(struct lua_State *L) {
 	lua_pushnumber(L, weekday);
 	lua_settable(L, -3);
 
-	assert(lua_gettop(L) == 1);
+	assert(plua_check_stack(L, 1, PLUA_TTABLE) == 0);
 
 	return 1;
 }

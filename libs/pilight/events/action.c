@@ -67,7 +67,10 @@ void event_action_init(void) {
 		OUT_OF_MEMORY
 	}
 
-	config_setting_get_string("actions-root", 0, &actions_root);
+	struct lua_state_t *state = plua_get_free_state();
+	int ret = config_setting_get_string(state->L, "actions-root", 0, &actions_root);
+	assert(plua_check_stack(state->L, 0) == 0);
+	plua_clear_state(state);
 
 	if((d = opendir(actions_root))) {
 		while((file = readdir(d)) != NULL) {
@@ -83,12 +86,11 @@ void event_action_init(void) {
 			}
 		}
 	}
-	closedir(d);
-	FREE(f);
-
-	if(actions_root != (void *)ACTION_ROOT) {
+	if(ret == 0 || actions_root != (void *)ACTION_ROOT) {
 		FREE(actions_root);
 	}
+	closedir(d);
+	FREE(f);
 }
 
 unsigned long event_action_set_execution_id(char *name) {
@@ -211,7 +213,8 @@ static int plua_action_module_call(struct lua_State *L, char *file, char *func, 
 	if(lua_getfield(L, -1, func) == 0) {
 #endif
 		logprintf(LOG_ERR, "%s: %s action missing", file, func);
-		return 0;
+		assert(plua_check_stack(L, 0) == 0);
+		return -1;
 	}
 
 	int nrargs = 0, i = 0;
@@ -272,26 +275,25 @@ static int plua_action_module_call(struct lua_State *L, char *file, char *func, 
 	}
 	args = NULL;
 
-	if(lua_pcall(L, 1, 1, 0) == LUA_ERRRUN) {
-		if(lua_type(L, -1) == LUA_TNIL) {
-			logprintf(LOG_ERR, "%s: syntax error", file);
-			return 0;
-		}
-		if(lua_type(L, -1) == LUA_TSTRING) {
-			logprintf(LOG_ERR, "%s", lua_tostring(L,  -1));
-			lua_pop(L, 1);
-			return 0;
-		}
+	assert(plua_check_stack(L, 3, PLUA_TTABLE, PLUA_TFUNCTION, PLUA_TTABLE) == 0);
+	if(plua_pcall(L, file, 1, 1) == -1) {
+		lua_remove(L, -1);
+		assert(plua_check_stack(L, 0) == 0);
+		return -1;
 	}
 
 	if(lua_isnumber(L, -1) == 0) {
 		logprintf(LOG_ERR, "%s: the %s function returned %s, number expected", file, func, lua_typename(L, lua_type(L, -1)));
-		return 0;
+		return -1;
 	}
+
+	lua_remove(L, 1);
 
 	int ret = (int)lua_tonumber(L, -1);
 
-	lua_remove(L, -1);
+	lua_remove(L, 1);
+
+	assert(plua_check_stack(L, 0) == 0);
 
 	return ret;
 }
@@ -326,7 +328,8 @@ static int event_action_prepare_call(char *module, char *func, struct event_acti
 		return -1;
 	}
 	if((L = state->L) == NULL) {
-		uv_mutex_unlock(&state->lock);
+		assert(plua_check_stack(L, 0) == 0);
+		plua_clear_state(state);
 		return -1;
 	}
 
@@ -346,8 +349,8 @@ static int event_action_prepare_call(char *module, char *func, struct event_acti
 	if(lua_isnil(L, -1) != 0) {
 		event_action_free_argument(args);
 		lua_remove(L, -1);
-		assert(lua_gettop(L) == 0);
-		uv_mutex_unlock(&state->lock);
+		assert(plua_check_stack(L, 0) == 0);
+		plua_clear_state(state);
 		return -1;
 	}
 	if(lua_istable(L, -1) != 0) {
@@ -362,23 +365,22 @@ static int event_action_prepare_call(char *module, char *func, struct event_acti
 			tmp = tmp->next;
 		}
 		if(file != NULL) {
-			if(plua_action_module_call(L, file, func, args) == 0) {
+			if(plua_action_module_call(L, file, func, args) == -1) {
 				lua_pop(L, -1);
-				assert(lua_gettop(L) == 0);
-				uv_mutex_unlock(&state->lock);
+				assert(plua_check_stack(L, 0) == 0);
+				plua_clear_state(state);
 				return -1;
 			}
 		} else {
 			event_action_free_argument(args);
-			assert(lua_gettop(L) == 0);
-			uv_mutex_unlock(&state->lock);
+			assert(plua_check_stack(L, 0) == 0);
+			plua_clear_state(state);
 			return -1;
 		}
 	}
-	lua_remove(L, -1);
 
-	assert(lua_gettop(L) == 0);
-	uv_mutex_unlock(&state->lock);
+	assert(plua_check_stack(L, 0) == 0);
+	plua_clear_state(state);
 
 	return 0;
 }
@@ -391,19 +393,14 @@ static int event_action_parameters_run(struct lua_State *L, char *file, int *nr,
 	if(lua_getfield(L, -1, "parameters") == 0) {
 #endif
 		logprintf(LOG_ERR, "%s: parameters function missing", file);
-		return 0;
+		assert(plua_check_stack(L, 0) == 0);
+		return -1;
 	}
 
-	if(lua_pcall(L, 0, LUA_MULTRET, 0) == LUA_ERRRUN) {
-		if(lua_type(L, -1) == LUA_TNIL) {
-			logprintf(LOG_ERR, "%s: syntax error", file);
-			return 0;
-		}
-		if(lua_type(L, -1) == LUA_TSTRING) {
-			logprintf(LOG_ERR, "%s", lua_tostring(L,  -1));
-			lua_pop(L, 1);
-			return 0;
-		}
+	assert(plua_check_stack(L, 2, PLUA_TTABLE, PLUA_TFUNCTION) == 0);
+	if(plua_pcall(L, file, 0, LUA_MULTRET) == -1) {
+		assert(plua_check_stack(L, 0) == 0);
+		return -1;
 	}
 
 	int i = 0, err = 0;
@@ -419,7 +416,7 @@ static int event_action_parameters_run(struct lua_State *L, char *file, int *nr,
 			lua_remove(L, -1);
 		}
 		lua_remove(L, -1);
-		return 0;
+		return -1;
 	}
 
 	if(((*ret) = MALLOC((*nr)*sizeof(char *))) == NULL) {
@@ -434,7 +431,9 @@ static int event_action_parameters_run(struct lua_State *L, char *file, int *nr,
 
 	lua_remove(L, -1);
 
-	return 1;
+	assert(plua_check_stack(L, 0) == 0);
+
+	return 0;
 }
 
 int event_action_get_parameters(char *module, int *nr, char ***ret) {
@@ -446,7 +445,8 @@ int event_action_get_parameters(char *module, int *nr, char ***ret) {
 	}
 
 	if((L = state->L) == NULL) {
-		uv_mutex_unlock(&state->lock);
+		assert(plua_check_stack(L, 0) == 0);
+		plua_clear_state(state);
 		return -1;
 	}
 
@@ -465,8 +465,8 @@ int event_action_get_parameters(char *module, int *nr, char ***ret) {
 
 	if(lua_isnil(L, -1) != 0) {
 		lua_remove(L, -1);
-		assert(lua_gettop(L) == 0);
-		uv_mutex_unlock(&state->lock);
+		assert(plua_check_stack(L, 0) == 0);
+		plua_clear_state(state);
 		return -1;
 	}
 	if(lua_istable(L, -1) != 0) {
@@ -480,17 +480,17 @@ int event_action_get_parameters(char *module, int *nr, char ***ret) {
 			}
 			tmp = tmp->next;
 		}
-		if(event_action_parameters_run(L, file, nr, ret) == 0) {
+		if(event_action_parameters_run(L, file, nr, ret) == -1) {
 			lua_pop(L, -1);
-			assert(lua_gettop(L) == 0);
-			uv_mutex_unlock(&state->lock);
+			assert(plua_check_stack(L, 0) == 0);
+			plua_clear_state(state);
 			return -1;
 		}
 	}
 	lua_pop(L, -1);
 
-	assert(lua_gettop(L) == 0);
-	uv_mutex_unlock(&state->lock);
+	assert(plua_check_stack(L, 0) == 0);
+	plua_clear_state(state);
 
 	return 0;
 }

@@ -28,6 +28,7 @@
 #include "../core/dso.h"
 #include "../core/log.h"
 #include "../lua_c/lua.h"
+#include "../lua_c/table.h"
 
 #include "config.h"
 #include "settings.h"
@@ -91,71 +92,17 @@ void config_init(void) {
 	closedir(d);
 	FREE(f);
 
-	hardware_init();
-
-	if((table = MALLOC(sizeof(struct plua_metatable_t))) == NULL) {
-		OUT_OF_MEMORY
+	if(table == NULL) {
+		plua_metatable_init(&table);
 	}
-	memset(table, 0, sizeof(struct plua_metatable_t));
 }
 
 int config_exists(char *module) {
 	return plua_module_exists(module, STORAGE);
 }
 
-struct lua_state_t *plua_get_module(char *namespace, char *module) {
-	struct lua_state_t *state = NULL;
-	struct lua_State *L = NULL;
-	int match = 0;
-
-	state = plua_get_free_state();
-
-	if(state == NULL) {
-		return NULL;
-	}
-
-	if((L = state->L) == NULL) {
-		plua_clear_state(state);
-		return NULL;
-	}
-
-	char name[255], *p = name;
-	memset(name, '\0', 255);
-
-	sprintf(p, "%s.%s", namespace, module);
-	lua_getglobal(L, name);
-
-	if(lua_isnil(L, -1) != 0) {
-		lua_pop(L, -1);
-		assert(lua_gettop(L) == 0);
-		plua_clear_state(state);
-		return NULL;
-	}
-	if(lua_istable(L, -1) != 0) {
-		struct plua_module_t *tmp = plua_get_modules();
-		while(tmp) {
-			if(strcmp(module, tmp->name) == 0) {
-				state->module = tmp;
-				match = 1;
-				break;
-			}
-			tmp = tmp->next;
-		}
-		if(match == 1) {
-			return state;
-		}
-	}
-
-	lua_pop(L, -1);
-
-	assert(lua_gettop(L) == 0);
-	plua_clear_state(state);
-
-	return NULL;
-}
-
-int config_callback_read(char *module, char *string) {
-	struct lua_state_t *state = plua_get_module("storage", module);
+int config_callback_read(lua_State *L, char *module, char *string) {
+	struct lua_state_t *state = plua_get_module(L, "storage", module);
 	int x = 0;
 
 	if(state == NULL) {
@@ -165,8 +112,13 @@ int config_callback_read(char *module, char *string) {
 
 	plua_get_method(state->L, state->module->file, "read");
 
-	lua_pushstring(state->L, string);
+	if(string != NULL) {
+		lua_pushstring(state->L, string);
+	} else {
+		lua_pushnil(state->L);
+	}
 
+	assert(plua_check_stack(state->L, 3, PLUA_TTABLE, PLUA_TFUNCTION, PLUA_TSTRING | PLUA_TNIL) == 0);
 	if((x = plua_pcall(state->L, state->module->file, 1, 1)) == 0) {
 		if(lua_isnumber(state->L, -1) == 0) {
 			logprintf(LOG_ERR, "%s: the read function returned %s, number expected", state->module->file, lua_typename(state->L, lua_type(state->L, -1)));
@@ -174,19 +126,17 @@ int config_callback_read(char *module, char *string) {
 		}
 
 		x = (int)lua_tonumber(state->L, -1);
-
-		lua_pop(state->L, 1);
-		lua_pop(state->L, -1);
 	}
+	lua_pop(state->L, 1);
+	lua_pop(state->L, -1);
 
-	assert(lua_gettop(state->L) == 0);
-	plua_clear_state(state);
+	assert(plua_check_stack(state->L, 0) == 0);
 
 	return x;
 }
 
-char *config_callback_write(char *module) {
-	struct lua_state_t *state = plua_get_module("storage", module);
+char *config_callback_write(lua_State *L, char *module) {
+	struct lua_state_t *state = plua_get_module(L, "storage", module);
 	char *out = NULL;
 	int x = 0;
 
@@ -196,8 +146,13 @@ char *config_callback_write(char *module) {
 
 	plua_get_method(state->L, state->module->file, "write");
 
-	lua_pushstring(state->L, string);
+	if(string != NULL) {
+		lua_pushstring(state->L, string);
+	} else {
+		lua_pushnil(state->L);
+	}
 
+	assert(plua_check_stack(state->L, 3, PLUA_TTABLE, PLUA_TFUNCTION, PLUA_TSTRING | PLUA_TNIL) == 0);
 	if((x = plua_pcall(state->L, state->module->file, 1, 1)) == 0) {
 		if(lua_type(state->L, -1) != LUA_TSTRING && lua_type(state->L, -1) != LUA_TNIL) {
 			logprintf(LOG_ERR, "%s: the write function returned %s, string or nil expected", state->module->file, lua_typename(state->L, lua_type(state->L, -1)));
@@ -214,8 +169,7 @@ char *config_callback_write(char *module) {
 		lua_pop(state->L, -1);
 	}
 
-	assert(lua_gettop(state->L) == 0);
-	plua_clear_state(state);
+	assert(plua_check_stack(state->L, 0) == 0);
 
 	return out;
 }
@@ -261,16 +215,6 @@ int config_parse(struct JsonNode *root, unsigned short objects) {
 		}
 	}
 
-	if(((objects & CONFIG_HARDWARE) == CONFIG_HARDWARE) || ((objects & CONFIG_ALL) == CONFIG_ALL)) {
-		struct JsonNode *jnode = json_find_member(root, "hardware");
-		if(jnode == NULL) {
-			return -1;
-		}
-		if(config_hardware_parse(jnode) != 0) {
-			return -1;
-		}
-	}
-
 #ifdef EVENTS
 	if(((objects & CONFIG_RULES) == CONFIG_RULES) || ((objects & CONFIG_ALL) == CONFIG_ALL)) {
 		struct JsonNode *jnode = json_find_member(root, "rules");
@@ -286,18 +230,25 @@ int config_parse(struct JsonNode *root, unsigned short objects) {
 	return 0;
 }
 
-int config_read(unsigned short objects) {
+int config_read(lua_State *L, unsigned short objects) {
 	if(string != NULL) {
 		if(((objects & CONFIG_SETTINGS) == CONFIG_SETTINGS) || ((objects & CONFIG_ALL) == CONFIG_ALL)) {
-			if(config_callback_read("settings", string) != 1) {
+			if(config_callback_read(L, "settings", string) != 1) {
 				return -1;
 			}
 		}
 
 		if(((objects & CONFIG_REGISTRY) == CONFIG_REGISTRY) || ((objects & CONFIG_ALL) == CONFIG_ALL)) {
-			if(config_callback_read("registry", string) != 1) {
+			if(config_callback_read(L, "registry", string) != 1) {
 				return -1;
 			}
+		}
+	}
+
+	if(((objects & CONFIG_HARDWARE) == CONFIG_HARDWARE) || ((objects & CONFIG_ALL) == CONFIG_ALL)) {
+		if(config_callback_read(L, "hardware", string) != 1) {
+			FREE(string);
+			return -1;
 		}
 	}
 
@@ -320,7 +271,7 @@ int config_read(unsigned short objects) {
 		}
 
 		json_delete(root);
-		config_write(1, "all");
+		config_write(CONFIG_USER, "all");
 		FREE(content);
 	}
 
@@ -328,6 +279,7 @@ int config_read(unsigned short objects) {
 }
 
 struct JsonNode *config_print(int level, const char *media) {
+
 	struct JsonNode *root = NULL;
 	char *content = NULL;
 	/* Read JSON config file */
@@ -395,46 +347,52 @@ struct JsonNode *config_print(int level, const char *media) {
 			json_delete(jchild3);
 		}
 
-		char *settings = config_callback_write("settings");
+		struct lua_state_t *state = plua_get_free_state();
+		char *settings = config_callback_write(state->L, "settings");
 		if(settings != NULL) {
 			struct JsonNode *jchild = json_find_member(root, "settings");
 			json_remove_from_parent(jchild);
 			json_delete(jchild);
 			json_append_member(root, "settings", json_decode(settings));
 			FREE(settings);
-		}
-
-		struct JsonNode *jchild4 = config_hardware_sync(level, media);
-		jchild = json_find_member(root, "hardware");
-		json_remove_from_parent(jchild);
-		check = json_stringify(jchild4, NULL);
-		if(check != NULL) {
-			if(jchild4 != NULL && strcmp(check, "{}") != 0) {
-				json_append_member(root, "hardware", jchild4);
-				json_delete(jchild);
-			} else {
-				json_append_member(root, "hardware", jchild);
-				json_delete(jchild4);
-			}
-			json_free(check);
 		} else {
-			json_append_member(root, "hardware", jchild);
-			json_delete(jchild4);
+			struct JsonNode *jchild = json_find_member(root, "settings");
+			json_remove_from_parent(jchild);
+			json_append_member(root, "settings", jchild);
 		}
 
-		char *registry = config_callback_write("registry");
+		char *hardware = config_callback_write(state->L, "hardware");
+		if(hardware != NULL) {
+			struct JsonNode *jchild = json_find_member(root, "hardware");
+			json_remove_from_parent(jchild);
+			json_delete(jchild);
+			json_append_member(root, "hardware", json_decode(hardware));
+			FREE(hardware);
+		} else {
+			struct JsonNode *jchild = json_find_member(root, "hardware");
+			json_remove_from_parent(jchild);
+			json_append_member(root, "hardware", jchild);
+		}
+
+		char *registry = config_callback_write(state->L, "registry");
 		if(registry != NULL) {
 			struct JsonNode *jchild = json_find_member(root, "registry");
 			json_remove_from_parent(jchild);
 			json_delete(jchild);
 			json_append_member(root, "registry", json_decode(registry));
 			FREE(registry);
+		} else {
+			struct JsonNode *jchild = json_find_member(root, "registry");
+			json_remove_from_parent(jchild);
+			json_append_member(root, "registry", jchild);
 		}
+		assert(plua_check_stack(state->L, 0) == 0);
+		plua_clear_state(state);
 	}
+
 	if(content != NULL) {
 		FREE(content);
 	}
-
 	return root;
 }
 
@@ -452,6 +410,7 @@ int config_write(int level, char *media) {
 		json_delete(root);
 		return EXIT_FAILURE;
 	}
+
 	fseek(fp, 0L, SEEK_SET);
 	char *content = NULL;
 	if((content = json_stringify(root, "\t")) != NULL) {

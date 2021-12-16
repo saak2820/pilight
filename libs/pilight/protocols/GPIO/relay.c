@@ -22,6 +22,7 @@
 #include <sys/stat.h>
 #include <unistd.h>
 #include <math.h>
+#include <assert.h>
 #ifndef _WIN32
 #include <wiringx.h>
 #endif
@@ -82,11 +83,19 @@ static int createCode(JsonNode *code) {
 		goto clear;
 	}
 
-	if(config_setting_get_string("gpio-platform", 0, &platform) != 0) {
-		logprintf(LOG_ERR, "no gpio-platform configured");
-		have_error = 1;
-		goto clear;
+	{
+		struct lua_state_t *state = plua_get_free_state();
+		if(config_setting_get_string(state->L, "gpio-platform", 0, &platform) != 0) {
+			logprintf(LOG_ERR, "no gpio-platform configured");
+			have_error = 1;
+			assert(lua_gettop(state->L) == 0);
+			plua_clear_state(state);
+			goto clear;
+		}
+		assert(lua_gettop(state->L) == 0);
+		plua_clear_state(state);
 	}
+
 	if(strcmp(platform, "none") == 0) {
 		FREE(platform);
 		logprintf(LOG_ERR, "no gpio-platform configured");
@@ -171,41 +180,50 @@ static int checkValues(JsonNode *code) {
 		if((jchild = json_find_element(jid, 0)) != NULL) {
 			if(json_find_number(jchild, "gpio", &itmp) == 0) {
 				int gpio = (int)itmp;
-				int state = -1;
+				int state1 = -1;
 				char *platform = GPIO_PLATFORM;
-				if(config_setting_get_string("gpio-platform", 0, &platform) != 0 || strcmp(platform, "none") == 0) {
+
+				struct lua_state_t *state = plua_get_free_state();
+				if(config_setting_get_string(state->L, "gpio-platform", 0, &platform) != 0 || strcmp(platform, "none") == 0) {
 					logprintf(LOG_ERR, "relay: no gpio-platform configured");
-					return -1;
-				} else if(wiringXSetup(platform, logprintf1) < 0) {
-					logprintf(LOG_ERR, "unable to setup wiringX") ;
-					return -1;
-				} else if(wiringXValidGPIO(gpio) != 0) {
-					logprintf(LOG_ERR, "relay: invalid gpio range");
+					assert(plua_check_stack(state->L, 0) == 0);
+					plua_clear_state(state);
 					return -1;
 				} else {
-					pinMode(gpio, PINMODE_INPUT);
-					state = digitalRead(gpio);
-					if(strcmp(def, "on") == 0) {
-						state ^= 1;
-					}
+					assert(plua_check_stack(state->L, 0) == 0);
+					plua_clear_state(state);
 
-					relay->message = json_mkobject();
-					JsonNode *code = json_mkobject();
-					json_append_member(code, "gpio", json_mknumber(gpio, 0));
-					if(state == 1) {
-						json_append_member(code, "state", json_mkstring("on"));
+					if(wiringXSetup(platform, logprintf1) < 0) {
+						logprintf(LOG_ERR, "unable to setup wiringX") ;
+						return -1;
+					} else if(wiringXValidGPIO(gpio) != 0) {
+						logprintf(LOG_ERR, "relay: invalid gpio range");
+						return -1;
 					} else {
-						json_append_member(code, "state", json_mkstring("off"));
-					}
+						pinMode(gpio, PINMODE_INPUT);
+						state1 = digitalRead(gpio);
+						if(strcmp(def, "on") == 0) {
+							state1 ^= 1;
+						}
 
-					json_append_member(relay->message, "message", code);
-					json_append_member(relay->message, "origin", json_mkstring("sender"));
-					json_append_member(relay->message, "protocol", json_mkstring(relay->id));
-					if(pilight.broadcast != NULL) {
-						pilight.broadcast(relay->id, relay->message, PROTOCOL);
+						relay->message = json_mkobject();
+						JsonNode *code = json_mkobject();
+						json_append_member(code, "gpio", json_mknumber(gpio, 0));
+						if(state1 == 1) {
+							json_append_member(code, "state", json_mkstring("on"));
+						} else {
+							json_append_member(code, "state", json_mkstring("off"));
+						}
+
+						json_append_member(relay->message, "message", code);
+						json_append_member(relay->message, "origin", json_mkstring("sender"));
+						json_append_member(relay->message, "protocol", json_mkstring(relay->id));
+						if(pilight.broadcast != NULL) {
+							pilight.broadcast(relay->id, relay->message, PROTOCOL);
+						}
+						json_delete(relay->message);
+						relay->message = NULL;
 					}
-					json_delete(relay->message);
-					relay->message = NULL;
 				}
 			}
 		}

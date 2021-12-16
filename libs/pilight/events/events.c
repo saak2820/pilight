@@ -23,6 +23,7 @@
 	#ifdef __mips__
 		#define __USE_UNIX98
 	#endif
+#include <assert.h>
 #endif
 
 #include "../core/pilight.h"
@@ -1737,6 +1738,7 @@ static int run_action(struct tree_t *tree, struct rules_t *obj, unsigned short v
 			if(event_action_run(tree->token->value, args) == -1) {
 				return -1;
 			}
+			obj->status = 1;
 		}
 	}
 
@@ -2036,7 +2038,7 @@ void *events_loop(void *param) {
 #ifndef WIN32
 						clock_gettime(CLOCK_MONOTONIC, &tmp_rules->timestamp.first);
 #endif
-						if(event_parse_rule(str, tmp_rules, 0, 0) == 0) {
+						if(event_parse_rule(str, tmp_rules, 0, 0) == 1) {
 							if(tmp_rules->status == 1) {
 								logprintf(LOG_INFO, "executed rule: %s", tmp_rules->name);
 							}
@@ -2117,7 +2119,11 @@ void *events_clientize(void *param) {
 	char *out = NULL;
 	int standalone = 0;
 	int client_loop = 0;
-	config_setting_get_number("standalone", 0, &standalone);
+
+	struct lua_state_t *state = plua_get_free_state();
+	config_setting_get_number(state->L, "standalone", 0, &standalone);
+	assert(lua_gettop(state->L) == 0);
+	plua_clear_state(state);
 
 	while(loop) {
 

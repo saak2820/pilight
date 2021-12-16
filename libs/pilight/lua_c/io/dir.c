@@ -27,6 +27,7 @@
 
 #include "../../core/log.h"
 #include "../../config/config.h"
+#include "../table.h"
 #include "../io.h"
 
 typedef struct lua_dir_t {
@@ -54,16 +55,15 @@ static int plua_io_dir_exists(struct lua_State *L) {
 	struct lua_dir_t *dir = (void *)lua_topointer(L, lua_upvalueindex(1));
 
 	if(lua_gettop(L) != 0) {
-		luaL_error(L, "dir.exists requires 0 arguments, %d given", lua_gettop(L));
-		return 0;
+		pluaL_error(L, "dir.exists requires 0 arguments, %d given", lua_gettop(L));
 	}
 
 	if(dir == NULL) {
-		luaL_error(L, "internal error: dir object not passed");
+		pluaL_error(L, "internal error: dir object not passed");
 	}
 
 	if(dir->dir == NULL) {
-		luaL_error(L, "dir.exists: dir has not been set");
+		pluaL_error(L, "dir.exists: dir has not been set");
 	}
 
 	struct stat s;
@@ -83,7 +83,7 @@ static int plua_io_dir_exists(struct lua_State *L) {
     }
 	}
 
-	assert(lua_gettop(L) == 1);
+	assert(plua_check_stack(L, 1, PLUA_TBOOLEAN) == 0);
 
 	return 1;
 }
@@ -93,16 +93,16 @@ static int plua_io_dir_close(struct lua_State *L) {
 	struct lua_dir_t *dir = (void *)lua_topointer(L, lua_upvalueindex(1));
 
 	if(lua_gettop(L) != 0) {
-		luaL_error(L, "dir.close requires 0 arguments, %d given", lua_gettop(L));
+		pluaL_error(L, "dir.close requires 0 arguments, %d given", lua_gettop(L));
 		return 0;
 	}
 
 	if(dir == NULL) {
-		luaL_error(L, "internal error: dir object not passed");
+		pluaL_error(L, "internal error: dir object not passed");
 	}
 
 	if(dir->dir == NULL) {
-		luaL_error(L, "dir.close: dir has not been set");
+		pluaL_error(L, "dir.close: dir has not been set");
 	}
 
 	plua_gc_unreg(L, dir);
@@ -110,7 +110,8 @@ static int plua_io_dir_close(struct lua_State *L) {
 	plua_io_dir_gc(dir);
 
 	lua_pushboolean(L, 1);
-	assert(lua_gettop(L) == 1);
+
+	assert(plua_check_stack(L, 1, PLUA_TBOOLEAN) == 0);
 
 	return 1;
 }
@@ -131,8 +132,7 @@ static void plua_io_dir_object(lua_State *L, struct lua_dir_t *dir) {
 
 int plua_io_dir(struct lua_State *L) {
 	if(lua_gettop(L) != 1) {
-		luaL_error(L, "dir requires 0 arguments, %d given", lua_gettop(L));
-		return 0;
+		pluaL_error(L, "dir requires 1 argument, %d given", lua_gettop(L));
 	}
 
 	char *name = NULL;
@@ -162,10 +162,7 @@ int plua_io_dir(struct lua_State *L) {
 	}
 	memset(lua_dir, '\0', sizeof(struct lua_dir_t));
 
-	if((lua_dir->table = MALLOC(sizeof(struct plua_metatable_t))) == NULL) {
-		OUT_OF_MEMORY /*LCOV_EXCL_LINE*/
-	}
-	memset(lua_dir->table, 0, sizeof(struct plua_metatable_t));
+	plua_metatable_init(&lua_dir->table);
 
 	if((lua_dir->dir = STRDUP(name)) == NULL) {
 		OUT_OF_MEMORY
@@ -178,7 +175,7 @@ int plua_io_dir(struct lua_State *L) {
 
 	plua_io_dir_object(L, lua_dir);
 
-	lua_assert(lua_gettop(L) == 1);
+	assert(plua_check_stack(L, 1, PLUA_TTABLE) == 0);
 
 	return 1;
 }

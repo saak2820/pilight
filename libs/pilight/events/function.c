@@ -52,7 +52,10 @@ void event_function_init(void) {
 		OUT_OF_MEMORY
 	}
 
-	config_setting_get_string("functions-root", 0, &functions_root);
+	struct lua_state_t *state = plua_get_free_state();
+	int ret = config_setting_get_string(state->L, "functions-root", 0, &functions_root);
+	assert(plua_check_stack(state->L, 0) == 0);
+	plua_clear_state(state);
 
 	if((d = opendir(functions_root))) {
 		while((file = readdir(d)) != NULL) {
@@ -68,12 +71,11 @@ void event_function_init(void) {
 			}
 		}
 	}
-	closedir(d);
-	FREE(f);
-
-	if(functions_root != (void *)FUNCTION_ROOT) {
+	if(ret == 0 || functions_root != (void *)FUNCTION_ROOT) {
 		FREE(functions_root);
 	}
+	closedir(d);
+	FREE(f);
 }
 
 static int plua_function_module_run(struct lua_State *L, char *file, struct event_function_args_t *args, struct varcont_t *v) {
@@ -84,7 +86,8 @@ static int plua_function_module_run(struct lua_State *L, char *file, struct even
 	if(lua_getfield(L, -1, "run") == 0) {
 #endif
 		logprintf(LOG_ERR, "%s: run function missing", file);
-		return 0;
+		assert(plua_check_stack(L, 0) == 0);
+		return -1;
 	}
 
 	int nrargs = 0;
@@ -117,23 +120,35 @@ static int plua_function_module_run(struct lua_State *L, char *file, struct even
 	}
 	args = NULL;
 
-	if(lua_pcall(L, nrargs, 1, 0) == LUA_ERRRUN) {
-		if(lua_type(L, -1) == LUA_TNIL) {
-			logprintf(LOG_ERR, "%s: syntax error", file);
-			return 0;
+	int i = 0;
+	for(i=1;i<nrargs+3;i++) {
+		switch(i) {
+			case 1: {
+				assert(lua_type(L, i) == LUA_TTABLE);
+			} break;
+			case 2: {
+				assert(lua_type(L, i) == LUA_TFUNCTION);
+			} break;
+			default: {
+				assert(
+					lua_type(L, i) == LUA_TNUMBER ||
+					lua_type(L, i) == LUA_TSTRING ||
+					lua_type(L, i) == LUA_TBOOLEAN
+				);
+			} break;
 		}
-		if(lua_type(L, -1) == LUA_TSTRING) {
-			logprintf(LOG_ERR, "%s", lua_tostring(L,  -1));
-			lua_pop(L, 1);
-			return 0;
-		}
+	}
+
+	if(plua_pcall(L, file, nrargs, 1) == -1) {
+		return -1;
 	}
 
 	if(lua_isstring(L, -1) == 0 &&
 		lua_isnumber(L, -1) == 0 &&
 		lua_isboolean(L, -1) == 0) {
 		logprintf(LOG_ERR, "%s: the run function returned %s, string, number or boolean expected", file, lua_typename(L, lua_type(L, -1)));
-		return 0;
+		assert(plua_check_stack(L, 0) == 0);
+		return -1;
 	}
 
 	if(lua_isnumber(L, -1) == 1) {
@@ -154,9 +169,12 @@ static int plua_function_module_run(struct lua_State *L, char *file, struct even
 		v->type_ = JSON_BOOL;
 	}
 
-	lua_pop(L, 1);
+	lua_remove(L, -1);
+	lua_remove(L, -1);
 
-	return 1;
+	assert(plua_check_stack(L, 0) == 0);
+
+	return 0;
 }
 
 int event_function_exists(char *module) {
@@ -222,8 +240,8 @@ int event_function_callback(char *module, struct event_function_args_t *args, st
 		return -1;
 	}
 	if((L = state->L) == NULL) {
-		assert(lua_gettop(L) == 0);
-		uv_mutex_unlock(&state->lock);
+		assert(plua_check_stack(L, 0) == 0);
+		plua_clear_state(state);
 		return -1;
 	}
 
@@ -236,8 +254,8 @@ int event_function_callback(char *module, struct event_function_args_t *args, st
 	if(lua_isnil(L, -1) != 0) {
 		event_function_free_argument(args);
 		lua_remove(L, -1);
-		assert(lua_gettop(L) == 0);
-		uv_mutex_unlock(&state->lock);
+		assert(plua_check_stack(L, 0) == 0);
+		plua_clear_state(state);
 		return -1;
 	}
 	if(lua_istable(L, -1) != 0) {
@@ -252,23 +270,23 @@ int event_function_callback(char *module, struct event_function_args_t *args, st
 			tmp = tmp->next;
 		}
 		if(file != NULL) {
-			if(plua_function_module_run(L, file, args, v) == 0) {
+			if(plua_function_module_run(L, file, args, v) == -1) {
 				lua_pop(L, -1);
-				assert(lua_gettop(L) == 0);
-				uv_mutex_unlock(&state->lock);
+				assert(plua_check_stack(L, 0) == 0);
+				plua_clear_state(state);
 				return -1;
 			}
 		} else {
 			event_function_free_argument(args);
-			assert(lua_gettop(L) == 0);
-			uv_mutex_unlock(&state->lock);
+			assert(plua_check_stack(L, 0) == 0);
+			plua_clear_state(state);
 			return -1;
 		}
 	}
 	lua_pop(L, -1);
 
-	assert(lua_gettop(L) == 0);
-	uv_mutex_unlock(&state->lock);
+	assert(plua_check_stack(L, 0) == 0);
+	plua_clear_state(state);
 
 	return 0;
 }

@@ -1,6 +1,43 @@
 Changelog
 =========
 
+.. versionadded:: 8.1.5
+
+.. rubric:: Changes
+
+- Lua pilight.defaults are renamed to pilight.default
+- Removed 433lirc hardware module
+
+.. rubric:: Improvment
+
+- Add warning when other protocol options besides the id are defined as an array
+- Added Kerui an TFA2017 protocol
+- Allow userdata in eventpool callbacks
+- Added C getters and setters for lua metatable
+- Added pilight event lua c to lua interface
+- Ported hardware modules to lua
+- Ported config hardware parsing to lua
+- Added pilight io spi and serial interface to lua
+- Added pilight log to lua
+- Allow enforcing the old state in a switch action
+- Pass lua metatable by reference
+- Add support for the coap protocol
+- C handler for lua metatables
+- pilight lua metatables are now threadsafe
+- Added IWDS07 contact protocol
+
+.. rubric:: Fixes
+
+- Fixed segfault in duplicate lua metatable key
+- Fixed segfault due to long device strings #413
+- Fixed garbage collection in event module loaders
+- Fixed bug using boolean value in lua metatable
+- Fixed lua stack not fully cleared in certain cases
+- Fixed bug in which action execution wasn't logged
+- Fixed threadpool work creation outside main thread
+- Fixed buffer overflow in lua sync lib
+- Fixed unitialized values
+
 .. versionadded:: 8.1.4
 
 .. rubric:: Improvements

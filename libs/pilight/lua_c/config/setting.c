@@ -32,8 +32,6 @@
 #include "../../core/log.h"
 #include "../../config/settings.h"
 #include "../config.h"
-#include "device.h"
-#include "../../protocols/protocol.h"
 
 int plua_config_setting(lua_State *L) {
 	char buf[128] = { '\0' }, *p = buf;
@@ -53,16 +51,20 @@ int plua_config_setting(lua_State *L) {
 		lua_remove(L, -1);
 	}
 
-	if(config_setting_get_string((char *)name, 0, &sval) == 0) {
+	if(config_setting_get_string(L, (char *)name, 0, &sval) == 0) {
 		lua_pushstring(L, sval);
 		FREE(sval);
-	} else if(config_setting_get_number((char *)name, 0, &ival) == 0) {
+
+		assert(plua_check_stack(L, 1, PLUA_TSTRING) == 0);
+	} else if(config_setting_get_number(L, (char *)name, 0, &ival) == 0) {
 		lua_pushnumber(L, ival);
+
+		assert(plua_check_stack(L, 1, PLUA_TNUMBER) == 0);
 	} else {
 		lua_pushnil(L);
-	}
 
-	assert(lua_gettop(L) == 1);
+		assert(plua_check_stack(L, 1, PLUA_TNIL) == 0);
+	}
 
 	return 1;
 }
